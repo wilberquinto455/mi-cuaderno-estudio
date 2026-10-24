@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cuaderno de estudio | CCNA y programación</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root { --sidebar-width: 17rem; --ink: #26364a; --muted: #6e7d90; --accent: #5479a8; --page: #f4f7fb; --line: #e5ebf2; }
+    body { overflow-x: hidden; background: var(--page); color: var(--ink); }
+    #wrapper { display: flex; min-height: 100vh; }
+    #sidebar { width: var(--sidebar-width); margin-left: calc(-1 * var(--sidebar-width)); transition: margin .25s ease-out; flex-shrink: 0; background: #17191d !important; color: #f1f3f5 !important; border-right: 1px solid #292d33; }
+    #wrapper.toggled #sidebar { margin-left: 0; }
+    #page-content { min-width: 100vw; }
+    #sidebar .border-bottom { border-color: #30343a !important; }
+    #sidebar a.fs-5 { color: #f8f9fa !important; }
+    #sidebar .text-secondary { color: #a7afb9 !important; }
+    #sidebar .nav-link { color: #c5cbd3; border-radius: .55rem; font-size: .94rem; }
+    #sidebar .nav-link:hover, #sidebar .nav-link.active { color: #fff; background: #2a3038; }
+    .sidebar-subitems { padding-left: 1rem; border-left: 1px solid #3b4149; margin-left: .75rem; }
+    .topic-section { scroll-margin-top: 5rem; }
+    .hero-panel { background: linear-gradient(125deg, #eaf3ff 0%, #eef7f6 100%); border: 1px solid #e1ebf5; color: var(--ink); }
+    .hero-panel .lead { color: #5c6d80; }
+    h2 { color: #30445d; font-weight: 650; }
+    .card, .accordion-item { border: 1px solid var(--line); border-radius: .8rem; background: #fff; }
+    .card { box-shadow: 0 .25rem 1rem rgba(45, 65, 90, .045) !important; }
+    .card-body { padding: 1.25rem; }
+    .navbar { background: rgba(255,255,255,.94) !important; }
+    .navbar-text { color: #64758a; }
+    .btn-primary { --bs-btn-bg: #5d7fa9; --bs-btn-border-color: #5d7fa9; --bs-btn-hover-bg: #496c97; --bs-btn-hover-border-color: #496c97; }
+    .table thead.table-dark th { background: #eaf0f6; color: #40556d; border-color: #dce5ee; }
+    .table-striped > tbody > tr:nth-of-type(odd) > * { --bs-table-bg: #f8fafd; }
+    .badge { font-weight: 600; }
+    @media (min-width: 768px) {
+      #sidebar { margin-left: 0; }
+      #page-content { min-width: 0; width: 100%; }
+      #wrapper.toggled #sidebar { margin-left: calc(-1 * var(--sidebar-width)); }
+    }
+  </style>
+</head>
+<body>
+  <div id="wrapper">
+    <aside id="sidebar">
+      <div class="p-3 border-bottom">
+        <a class="fs-5 fw-semibold text-white text-decoration-none" href="#inicio">Cuaderno de estudio</a>
+        <div class="text-secondary small mt-1">Redes · lógica · práctica</div>
+      </div>
+      <nav class="p-3" aria-label="Navegación principal">
+        <a class="nav-link px-2 py-2 mb-1" href="#inicio">Inicio</a>
+        <div class="text-uppercase text-secondary small fw-semibold mt-3 mb-2">CCNA 200-301</div>
+        <div class="sidebar-subitems">
+          <a class="nav-link px-2 py-2 mb-1" href="#redes">Conceptos de red</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#switching">Switching y VLAN</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#routing">Routing e IP</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#servicios-red">Servicios y seguridad</a>
+        </div>
+        <div class="text-uppercase text-secondary small fw-semibold mt-3 mb-2">Programación</div>
+        <div class="sidebar-subitems">
+          <a class="nav-link px-2 py-2 mb-1" href="#logica">Lógica de programación</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#ejercicios">Ejercicios</a>
+        </div>
+        <div class="text-uppercase text-secondary small fw-semibold mt-3 mb-2">Otros conocimientos</div>
+        <div class="sidebar-subitems">
+          <a class="nav-link px-2 py-2 mb-1" href="#bluecat">BlueCat</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#bases-datos">Bases de datos</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#linux">Comandos de Linux</a>
+          <a class="nav-link px-2 py-2 mb-1" href="#laboratorios">Universidad y labs</a>
+        </div>
+        <a class="nav-link px-2 py-2 mt-3" href="#recomendaciones">Recomendaciones</a>
+        <a class="nav-link px-2 py-2" href="#documentos">Mis documentos</a>
+      </nav>
+    </aside>
+
+    <main id="page-content">
+      <nav class="navbar bg-white border-bottom sticky-top">
+        <div class="container-fluid">
+          <button class="btn btn-primary" id="sidebarToggle" type="button" aria-label="Mostrar u ocultar el menú" aria-controls="sidebar" aria-expanded="true">☰ Menú</button>
+          <span class="navbar-text ms-3 me-auto">Ruta personal de aprendizaje</span>
+        </div>
+      </nav>
+
+      <div class="container-fluid p-4 p-lg-5">
+        <section id="inicio" class="hero-panel p-4 p-md-5 mb-5 rounded-4 topic-section">
+          <span class="badge rounded-pill px-3 py-2 mb-3" style="background:#dceafa;color:#47698f">Tu espacio de aprendizaje</span>
+          <h1 class="display-5 fw-bold">Redes y lógica, paso a paso</h1>
+          <p class="col-lg-8 fs-5 lead">Organiza tus apuntes del CCNA 200-301, guarda documentos de estudio y practica los fundamentos de programación en un solo lugar.</p>
+          <a class="btn btn-primary btn-lg" href="#redes">Explorar temas</a>
+        </section>
+
+        <section class="mb-5 topic-section" id="ccna">
+          <div class="d-flex flex-wrap justify-content-between align-items-end mb-3">
+            <div><span class="text-primary fw-semibold">CERTIFICACIÓN</span><h2 class="mt-1">CCNA 200-301</h2></div>
+            <p class="text-secondary mb-2">Temario organizado para tus notas y repasos.</p>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6 col-xl-3" id="redes"><article class="card h-100 shadow-sm"><div class="card-body"><span class="badge text-bg-primary mb-2">01 · Fundamentos</span><h3 class="h5">Conceptos de red</h3><p class="text-secondary">Modelos OSI y TCP/IP, topologías, medios, interfaces y conceptos básicos de Ethernet.</p><a href="#documentos" class="card-link">Añadir apuntes</a></div></article></div>
+            <div class="col-md-6 col-xl-3" id="switching"><article class="card h-100 shadow-sm"><div class="card-body"><span class="badge text-bg-success mb-2">02 · LAN</span><h3 class="h5">Switching y VLAN</h3><p class="text-secondary">VLAN, enlaces troncales, spanning tree, EtherChannel y configuración de switches.</p><a href="#documentos" class="card-link">Añadir apuntes</a></div></article></div>
+            <div class="col-md-6 col-xl-3" id="routing"><article class="card h-100 shadow-sm"><div class="card-body"><span class="badge text-bg-warning mb-2">03 · IP</span><h3 class="h5">Routing e IP</h3><p class="text-secondary">IPv4, IPv6, subnetting, rutas estáticas, OSPF y resolución de problemas.</p><a href="#documentos" class="card-link">Añadir apuntes</a></div></article></div>
+            <div class="col-md-6 col-xl-3" id="servicios-red"><article class="card h-100 shadow-sm"><div class="card-body"><span class="badge text-bg-info mb-2">04 · Operación</span><h3 class="h5">Servicios y seguridad</h3><p class="text-secondary">DHCP, DNS, NAT, ACL, seguridad básica, automatización y administración.</p><a href="#documentos" class="card-link">Añadir apuntes</a></div></article></div>
+          </div>
+        </section>
+
+        <section id="logica" class="mb-5 topic-section">
+          <span class="text-success fw-semibold">FUNDAMENTOS</span><h2 class="mt-1">Lógica de programación</h2>
+          <p class="text-secondary">Un espacio para documentar conceptos y avanzar desde problemas sencillos.</p>
+          <div class="row g-3">
+            <div class="col-md-4"><div class="card h-100"><div class="card-body"><h3 class="h5">Secuencias y variables</h3><p class="text-secondary mb-0">Entradas, salidas, tipos de datos, asignaciones y operaciones.</p></div></div></div>
+            <div class="col-md-4"><div class="card h-100"><div class="card-body"><h3 class="h5">Decisiones y ciclos</h3><p class="text-secondary mb-0">Condicionales, comparaciones, bucles y control de flujo.</p></div></div></div>
+            <div class="col-md-4"><div class="card h-100"><div class="card-body"><h3 class="h5">Funciones y arreglos</h3><p class="text-secondary mb-0">Divide problemas en partes y trabaja con colecciones de datos.</p></div></div></div>
+          </div>
+        </section>
+
+        <section id="ejercicios" class="mb-5 topic-section">
+          <h2>Ejercicios para practicar</h2>
+          <div class="accordion mt-3" id="exerciseList">
+            <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#exerciseOne" aria-expanded="true">01 · Par o impar</button></h3><div id="exerciseOne" class="accordion-collapse collapse show" data-bs-parent="#exerciseList"><div class="accordion-body"><p>Solicita un número entero e indica si es par o impar.</p><p class="mb-0"><strong>Pista:</strong> usa el operador módulo (%) y comprueba el residuo al dividir entre 2.</p></div></div></div>
+            <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#exerciseTwo">02 · Promedio de notas</button></h3><div id="exerciseTwo" class="accordion-collapse collapse" data-bs-parent="#exerciseList"><div class="accordion-body">Pide tres notas, calcula el promedio y muestra si se alcanza la nota mínima que tú definas.</div></div></div>
+            <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#exerciseThree">03 · Adivina el número</button></h3><div id="exerciseThree" class="accordion-collapse collapse" data-bs-parent="#exerciseList"><div class="accordion-body">Compara intentos con un número secreto y da pistas de “mayor” o “menor” hasta acertar.</div></div></div>
+          </div>
+        </section>
+
+        <section id="bluecat" class="mb-5 topic-section">
+          <span class="text-info fw-semibold">GESTIÓN DE DIRECCIONES Y DNS</span><h2 class="mt-1">BlueCat</h2>
+          <p class="text-secondary">Documenta aquí tus prácticas y aprendizajes sobre administración de DNS, DHCP e IPAM con BlueCat.</p>
+          <div class="row g-3">
+            <div class="col-md-4"><article class="card h-100"><div class="card-body"><h3 class="h5">DNS y zonas</h3><p class="text-secondary mb-0">Anota zonas, registros, resolución de nombres y pruebas que realizaste.</p></div></article></div>
+            <div class="col-md-4"><article class="card h-100"><div class="card-body"><h3 class="h5">DHCP e IPAM</h3><p class="text-secondary mb-0">Registra rangos, subredes, reservas, asignaciones y el flujo de direcciones.</p></div></article></div>
+            <div class="col-md-4"><article class="card h-100"><div class="card-body"><h3 class="h5">Laboratorios y notas</h3><p class="text-secondary mb-0">Describe el objetivo, la configuración, el resultado y los problemas resueltos.</p></div></article></div>
+          </div>
+        </section>
+
+        <section id="bases-datos" class="mb-5 topic-section">
+          <span class="text-danger fw-semibold">DATOS</span><h2 class="mt-1">Bases de datos</h2>
+          <div class="row g-3">
+            <div class="col-lg-7"><div class="card h-100"><div class="card-body"><h3 class="h5">Temas para documentar</h3><p class="text-secondary">Modelo relacional, tablas y claves; normalización; consultas SQL; relaciones y JOIN; índices, transacciones y respaldos.</p><h4 class="h6">Consultas de referencia</h4><pre class="bg-light p-3 rounded mb-0"><code>SELECT nombre, correo
+FROM estudiantes
+WHERE activo = TRUE
+ORDER BY nombre;
+
+-- Relaciona filas de dos tablas
+SELECT e.nombre, c.nombre AS curso
+FROM estudiantes e
+JOIN cursos c ON c.id = e.curso_id;</code></pre></div></div></div>
+            <div class="col-lg-5"><div class="alert alert-warning h-100 mb-0"><h3 class="h5">Ideas para practicar</h3><ol class="mb-0"><li>Diseña una base de datos para una biblioteca.</li><li>Define claves primarias y relaciones.</li><li>Inserta datos de prueba y crea consultas para responder preguntas.</li><li>Guarda el diagrama y las consultas como parte del lab.</li></ol></div></div>
+          </div>
+        </section>
+
+        <section id="linux" class="mb-5 topic-section">
+          <span class="text-dark fw-semibold">TERMINAL</span><h2 class="mt-1">Comandos de Linux</h2>
+          <p class="text-secondary">Una chuleta personal: anota para qué sirve cada comando y ejemplos que hayas probado.</p>
+          <div class="table-responsive"><table class="table table-striped table-bordered bg-white align-middle"><thead class="table-dark"><tr><th>Comando</th><th>Uso</th><th>Ejemplo</th></tr></thead><tbody>
+            <tr><td><code>pwd</code></td><td>Muestra la ruta actual.</td><td><code>pwd</code></td></tr>
+            <tr><td><code>ls -la</code></td><td>Lista archivos, incluidos los ocultos, con detalles.</td><td><code>ls -la /etc</code></td></tr>
+            <tr><td><code>cd</code></td><td>Cambia de directorio.</td><td><code>cd ~/Documentos</code></td></tr>
+            <tr><td><code>mkdir -p</code></td><td>Crea directorios, también los intermedios.</td><td><code>mkdir -p labs/redes</code></td></tr>
+            <tr><td><code>cp</code> / <code>mv</code></td><td>Copia o mueve archivos.</td><td><code>cp notas.txt respaldo.txt</code></td></tr>
+            <tr><td><code>grep</code> / <code>find</code></td><td>Busca texto o archivos.</td><td><code>grep -n "error" archivo.log</code></td></tr>
+            <tr><td><code>ip addr</code></td><td>Consulta interfaces y direcciones IP.</td><td><code>ip addr show</code></td></tr>
+            <tr><td><code>ping</code> / <code>ss -tuln</code></td><td>Comprueba conectividad o puertos en escucha.</td><td><code>ping -c 4 1.1.1.1</code></td></tr>
+          </tbody></table></div>
+          <div class="alert alert-secondary mb-0"><strong>Consejo:</strong> revisa <code>man nombre_comando</code> o <code>nombre_comando --help</code> antes de usar opciones que puedan modificar o borrar archivos.</div>
+        </section>
+
+        <section id="laboratorios" class="mb-5 topic-section">
+          <span class="text-primary fw-semibold">PORTAFOLIO PERSONAL</span><h2 class="mt-1">Universidad y laboratorios</h2>
+          <p class="text-secondary">Usa esta sección como memoria de lo aprendido en cada curso, proyecto o práctica.</p>
+          <div class="row g-3">
+            <div class="col-lg-4"><div class="card h-100"><div class="card-body"><h3 class="h5">Ficha para cada lab</h3><ul class="text-secondary mb-0"><li>Curso y fecha</li><li>Objetivo y conceptos</li><li>Diagrama, código o comandos</li><li>Resultado y evidencia</li><li>Qué aprendí y qué mejoraría</li></ul></div></div></div>
+            <div class="col-lg-8"><div class="card h-100"><div class="card-body"><h3 class="h5">Mis proyectos</h3><p class="text-secondary">Todavía no hay laboratorios agregados. Puedes empezar con una práctica de subnetting, una consulta SQL, un script de Linux o un proyecto de la universidad.</p><a class="btn btn-outline-primary" href="#documentos">Adjuntar evidencia</a></div></div></div>
+          </div>
+        </section>
+
+        <section id="recomendaciones" class="mb-5 topic-section">
+          <span class="text-warning-emphasis fw-semibold">PARA ESTUDIAR MEJOR</span><h2 class="mt-1">Recomendaciones</h2>
+          <div class="row g-3 mt-1">
+            <div class="col-lg-6"><div class="alert alert-primary h-100 mb-0"><h3 class="h5">Para CCNA</h3><ul class="mb-0"><li>Alterna teoría con laboratorios de configuración y troubleshooting.</li><li>Practica subnetting con frecuencia y explica en voz alta cómo llegas al resultado.</li><li>Después de cada tema, resume comandos, conceptos y errores comunes con tus palabras.</li></ul></div></div>
+            <div class="col-lg-6"><div class="alert alert-success h-100 mb-0"><h3 class="h5">Para lógica</h3><ul class="mb-0"><li>Escribe primero los pasos en lenguaje natural o pseudocódigo.</li><li>Prueba casos normales, límites y entradas inesperadas.</li><li>Cuando funcione, intenta resolver el mismo problema de otra manera.</li></ul></div></div>
+          </div>
+        </section>
+
+        <section id="documentos" class="mb-4 topic-section">
+          <h2>Mis documentos</h2>
+          <p class="text-secondary">Agrega PDF, apuntes, imágenes o archivos de código para tenerlos a mano mientras estudias.</p>
+          <div class="card shadow-sm"><div class="card-body">
+            <label for="documentInput" class="form-label fw-semibold">Selecciona uno o varios archivos</label>
+            <input class="form-control" type="file" id="documentInput" multiple accept=".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg,.py,.js,.html,.css,.pkt,.pka">
+            <div class="form-text">Los archivos solo quedan disponibles en esta sesión del navegador; esta página todavía no los sube a un servidor.</div>
+            <ul class="list-group list-group-flush mt-3" id="documentList" aria-live="polite"><li class="list-group-item text-secondary px-0" id="emptyDocuments">Aún no has seleccionado documentos.</li></ul>
+          </div></div>
+        </section>
+        <footer class="border-top pt-3 text-secondary small">Cuaderno personal de estudio · Actualiza los apuntes a medida que avances.</footer>
+      </div>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const wrapper = document.getElementById('wrapper');
+    const toggle = document.getElementById('sidebarToggle');
+    toggle.addEventListener('click', () => {
+      wrapper.classList.toggle('toggled');
+      toggle.setAttribute('aria-expanded', String(!wrapper.classList.contains('toggled')));
+    });
+    const documentInput = document.getElementById('documentInput');
+    const documentList = document.getElementById('documentList');
+    const emptyDocuments = document.getElementById('emptyDocuments');
+    documentInput.addEventListener('change', () => {
+      if (documentInput.files.length) emptyDocuments?.remove();
+      for (const file of documentInput.files) {
+        const item = document.createElement('li');
+        item.className = 'list-group-item px-0 d-flex justify-content-between align-items-center gap-3';
+        const details = document.createElement('span');
+        details.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+        const badge = document.createElement('span');
+        badge.className = 'badge text-bg-light';
+        badge.textContent = file.type || 'Archivo';
+        item.append(details, badge);
+        documentList.append(item);
+      }
+      documentInput.value = '';
+    });
+  </script>
+</body>
+</html>
