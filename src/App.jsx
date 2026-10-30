@@ -61,6 +61,15 @@ function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
+  async function requestPasswordReset() {
+    if (!email.trim()) { setMessage('Escribe tu correo para enviarte el enlace de recuperación.'); return; }
+    setBusy(true); setMessage('');
+    const redirectTo = new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    setBusy(false);
+    setMessage(error ? error.message : 'Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña. Revisa también spam.');
+  }
+
   async function submit(event) {
     event.preventDefault(); setBusy(true); setMessage('');
     const result = mode === 'login'
@@ -77,13 +86,31 @@ function AuthScreen() {
       <label className="form-label" htmlFor="password">Contraseña</label><input id="password" className="form-control" type="password" minLength="6" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required value={password} onChange={e => setPassword(e.target.value)} />
       {message && <div className="alert alert-info mt-3 mb-0" role="status">{message}</div>}
       <button className="btn btn-primary w-100 mt-4" disabled={busy}>{busy ? 'Un momento…' : mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}</button>
-    </form><p className="auth-switch">{mode === 'login' ? '¿Primera vez aquí?' : '¿Ya tienes cuenta?'} <button type="button" className="link-button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); }}>{mode === 'login' ? 'Crear cuenta' : 'Iniciar sesión'}</button></p>
+    </form>{mode === 'login' && <p className="auth-switch mb-0"><button type="button" className="link-button" disabled={busy} onClick={requestPasswordReset}>Olvidé mi contraseña</button></p>}<p className="auth-switch">{mode === 'login' ? '¿Primera vez aquí?' : '¿Ya tienes cuenta?'} <button type="button" className="link-button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); }}>{mode === 'login' ? 'Crear cuenta' : 'Iniciar sesión'}</button></p>
   </section></main>;
+}
+
+function PasswordRecoveryScreen({ onComplete }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault(); setBusy(true); setMessage('');
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) setMessage(error.message);
+    else { setSaved(true); setMessage('Contraseña actualizada correctamente.'); }
+  }
+
+  return <main className="auth-wrap"><section className="auth-card"><div className="brand-mark">EG</div><span className="eyebrow">RECUPERACIÓN DE CUENTA</span><h1>Elige una contraseña nueva</h1><p className="text-secondary">Usa al menos 6 caracteres.</p><form onSubmit={submit} className="mt-4"><label className="form-label" htmlFor="new-password">Nueva contraseña</label><input id="new-password" className="form-control" type="password" minLength="6" autoComplete="new-password" required disabled={saved} value={password} onChange={e => setPassword(e.target.value)} />{message && <div className="alert alert-info mt-3 mb-0" role="status">{message}</div>}<button className="btn btn-primary w-100 mt-4" disabled={busy || saved}>{busy ? 'Guardando…' : saved ? 'Contraseña guardada' : 'Guardar contraseña'}</button>{saved && <button type="button" className="btn btn-outline-primary w-100 mt-2" onClick={onComplete}>Volver a mi biblioteca</button>}</form></section></main>;
 }
 
 function App() {
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [categories, setCategories] = useState([]);
   const [notes, setNotes] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -101,7 +128,10 @@ function App() {
   useEffect(() => {
     if (!supabaseConfigured) { setAuthReady(true); return undefined; }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthReady(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -255,6 +285,7 @@ function App() {
   if (getPublicNoteId() && supabaseConfigured) return <PublicNote />;
   if (!supabaseConfigured) return <SetupNotice />;
   if (!authReady) return <div className="loading-screen">Preparando tu biblioteca…</div>;
+  if (passwordRecovery && session) return <PasswordRecoveryScreen onComplete={() => setPasswordRecovery(false)} />;
   if (!session) return <AuthScreen />;
 
   return <div className="app-shell">
