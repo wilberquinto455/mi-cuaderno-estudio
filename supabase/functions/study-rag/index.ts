@@ -104,12 +104,13 @@ Deno.serve(async (req) => {
       const embedded = await cloudflareRun(accountId, cloudflareToken, '@cf/baai/bge-m3', { text: [question] });
       const vector = embedded?.data?.[0];
       if (!Array.isArray(vector) || vector.length !== 1024) throw new Error('El modelo devolvió un vector inesperado.');
-      const { data: matches, error: matchError } = await db.rpc('match_study_chunks', {
-        query_embedding: `[${vector.join(',')}]`, match_count: 6, filter_category_id: body.categoryId || null,
+      const { data: matches, error: matchError } = await db.rpc('match_study_chunks_hybrid', {
+        query_embedding: `[${vector.join(',')}]`, query_text: question,
+        match_count: 6, filter_category_id: body.categoryId || null,
       });
       if (matchError) throw matchError;
-      const sources = (matches || []).filter((match: { similarity: number }) => match.similarity >= 0.2);
-      if (!sources.length) return json({ answer: 'Todavía no encuentro contenido relacionado en tus apuntes o documentos indexados. Guarda una nota o sube un PDF/TXT/MD para empezar.', sources: [] });
+      const sources = (matches || []).filter((match: { similarity: number; keyword_match: boolean }) => match.similarity >= 0.2 || match.keyword_match);
+      if (!sources.length) return json({ answer: 'No encontré fragmentos relacionados. Comprueba que guardaste el apunte después de activar el buscador y que estás consultando la categoría correcta.', sources: [] });
       const context = sources.map((source: { source_title: string; content: string }, index: number) => `[Fuente ${index + 1}: ${source.source_title}]\n${source.content}`).join('\n\n');
       const generated = await cloudflareRun(accountId, cloudflareToken, '@cf/meta/llama-3.2-3b-instruct', {
         messages: [
@@ -117,7 +118,7 @@ Deno.serve(async (req) => {
           { role: 'user', content: `PREGUNTA:\n${question}\n\nCONTEXTO:\n${context}` },
         ], max_tokens: 500, temperature: 0.2,
       });
-      return json({ answer: generated?.response || 'No se pudo generar una respuesta.', sources: sources.map((source: { source_title: string; similarity: number; document_id: string | null; note_id: string | null }) => ({ title: source.source_title, similarity: source.similarity, documentId: source.document_id, noteId: source.note_id })) });
+      return json({ answer: generated?.response || 'No se pudo generar una respuesta.', sources: sources.map((source: { source_title: string; content: string; similarity: number; document_id: string | null; note_id: string | null }) => ({ title: source.source_title, excerpt: source.content, similarity: source.similarity, documentId: source.document_id, noteId: source.note_id })) });
     }
     return json({ error: 'Acción no reconocida.' }, 400);
   } catch (error) {

@@ -3,4 +3,5 @@ dist/
 .env
 .env.*
 !.env.example
+2026-10-23/ho/outputs/estudio-guia/notas.txt
 .DS_Store

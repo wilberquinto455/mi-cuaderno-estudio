@@ -200,7 +200,11 @@ function App() {
       categoryId: result.data.category_id, title: result.data.title,
       chunks: splitIntoChunks(noteText),
     } });
-    setNotice(indexed.error ? `Apunte guardado. No se pudo indexar: ${indexed.error.message}` : 'Apunte guardado y añadido al buscador.');
+    setNotice(indexed.error
+      ? `Apunte guardado, pero no se pudo indexar: ${indexed.error.message}`
+      : indexed.data?.indexed
+        ? `Apunte guardado e indexado (${indexed.data.indexed} fragmentos).`
+        : 'Apunte guardado, pero no contiene texto para indexar.');
   }
 
   async function addCategory() {
@@ -256,6 +260,27 @@ function App() {
     else window.open(result.data.signedUrl, '_blank', 'noopener,noreferrer');
   }
 
+  async function openRagSource(source) {
+    if (source.noteId) {
+      const note = notes.find(item => item.id === source.noteId);
+      if (!note) { setNotice('No se encontró el apunte de esta fuente en tu biblioteca.'); return; }
+      const saved = note.id ? notes.find(item => item.id === currentNote.id) : null;
+      const hasUnsavedChanges = currentNote.id
+        ? Boolean(saved && (saved.title !== currentNote.title || saved.body !== currentNote.body || saved.category_id !== currentNote.category_id || saved.visibility !== currentNote.visibility))
+        : Boolean(currentNote.title.trim() || currentNote.body.trim());
+      if (hasUnsavedChanges && !window.confirm('Tienes cambios sin guardar en el editor. ¿Quieres abrir la fuente de todas formas?')) return;
+      setCurrentNote(note);
+      setActiveCategory(note.category_id || 'all');
+      setSearch('');
+      return;
+    }
+    if (source.documentId) {
+      const doc = documents.find(item => item.id === source.documentId);
+      if (!doc) { setNotice('No se encontró el documento de esta fuente en tu biblioteca.'); return; }
+      await openDocument(doc);
+    }
+  }
+
   async function deleteDocument(doc) {
     if (!window.confirm(`¿Eliminar “${doc.file_name}”?`)) return;
     const removed = await supabase.storage.from('study-files').remove([doc.storage_path]);
@@ -266,14 +291,20 @@ function App() {
 
   async function askLibrary(event) {
     event.preventDefault();
-    if (!question.trim()) return;
+    const submittedQuestion = question.trim();
+    if (!submittedQuestion) return;
     setAsking(true); setRagAnswer(null); setRagSources([]);
-    const { data, error } = await supabase.functions.invoke('study-rag', { body: {
-      action: 'ask', question: question.trim(), categoryId: activeCategory === 'all' ? null : activeCategory,
-    } });
-    setAsking(false);
-    if (error) setRagAnswer(`No se pudo consultar la biblioteca: ${error.message}`);
-    else { setRagAnswer(data.answer); setRagSources(data.sources || []); }
+    try {
+      const { data, error } = await supabase.functions.invoke('study-rag', { body: {
+        action: 'ask', question: submittedQuestion, categoryId: activeCategory === 'all' ? null : activeCategory,
+      } });
+      if (error) setRagAnswer(`No se pudo consultar la biblioteca: ${error.message}`);
+      else { setRagAnswer(data.answer); setRagSources(data.sources || []); }
+    } catch (error) {
+      setRagAnswer(`No se pudo consultar la biblioteca: ${error instanceof Error ? error.message : 'Error inesperado.'}`);
+    } finally {
+      setAsking(false);
+    }
   }
 
   async function copyPublicLink() {
@@ -308,7 +339,7 @@ function App() {
           <section className="rag-panel">
             <div className="rag-heading"><span>✦</span><div><strong>Pregunta a tu biblioteca</strong><small>Respuestas basadas en tus notas y documentos privados.</small></div></div>
             <form className="rag-form" onSubmit={askLibrary}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ej.: ¿Cómo se calcula una subred IPv6?" aria-label="Pregunta para tu biblioteca" maxLength={1200} /><button className="btn btn-primary" disabled={asking || !question.trim()}>{asking ? 'Buscando…' : 'Preguntar'}</button></form>
-            {ragAnswer && <div className="rag-answer" role="status"><p>{ragAnswer}</p>{ragSources.length > 0 && <div className="rag-source-list"><strong>Fuentes</strong>{ragSources.map((source, index) => <span key={`${source.title}-${index}`}>[{index + 1}] {source.title}</span>)}</div>}</div>}
+            {ragAnswer && <div className="rag-answer" role="status"><p>{ragAnswer}</p>{ragSources.length > 0 && <div className="rag-source-list"><strong>Fuentes usadas</strong>{ragSources.map((source, index) => <div className="rag-source-item" key={`${source.noteId || source.documentId || source.title}-${index}`}><div className="rag-source-heading"><span>[{index + 1}] {source.title}</span><button type="button" className="rag-source-open" onClick={() => openRagSource(source)}>{source.noteId ? 'Abrir apunte' : 'Abrir documento'} ↗</button></div>{source.excerpt && <details><summary>Ver fragmento consultado</summary><p>{source.excerpt}</p></details>}</div>)}</div>}</div>}
           </section>
           <div className="notes-list">{visibleNotes.length ? visibleNotes.map(note => {
             const category = categories.find(c => c.id === note.category_id);

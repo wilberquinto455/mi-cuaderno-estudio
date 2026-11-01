@@ -13,6 +13,7 @@ Este archivo crea el esquema inicial de la biblioteca de estudio:
 2. Ve a **SQL Editor → New query**.
 3. Ejecuta `001_core.sql` para crear categorías, notas, documentos y Storage privado.
 4. Ejecuta `002_rag.sql` para añadir pgvector, fragmentos semánticos y búsqueda privada.
+5. Ejecuta `003_hybrid_search.sql` para que el RAG combine significado y palabras clave al recuperar apuntes.
 
 ## Reglas importantes
 
@@ -28,4 +29,4 @@ Desde la raíz del repositorio, despliega `supabase/functions/study-rag` con Sup
 
 La función espera `CLOUDFLARE_ACCOUNT_ID` y `CLOUDFLARE_API_TOKEN` en **Edge Functions → Secrets**. No copies esos valores a `.env.local`, al frontend ni a GitHub. El RAG requiere inicio de sesión y consulta solo contenido de la cuenta del usuario.
 
-La interfaz extrae e indexa notas y archivos PDF con texto seleccionable, TXT y MD. Los PDF escaneados requieren OCR.
+La interfaz extrae e indexa notas y archivos PDF con texto seleccionable, TXT y MD. Los PDF escaneados requieren OCR. Al modificar una nota, pulsa **Guardar apunte** para actualizar su índice. Tras desplegar cambios en `study-rag`, vuelve a pegar/actualizar el código de `supabase/functions/study-rag/index.ts` en el editor de Supabase y despliega la función.
