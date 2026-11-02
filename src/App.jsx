@@ -52,6 +52,8 @@ function MarkdownContent({ text, className = '' }) {
   const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
   const blocks = [];
   let index = 0;
+  const tableCells = line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+  const isTableSeparator = line => tableCells(line).length > 1 && tableCells(line).every(cell => /^:?-{3,}:?$/.test(cell));
   while (index < lines.length) {
     const line = lines[index];
     if (!line.trim()) { index += 1; continue; }
@@ -63,6 +65,19 @@ function MarkdownContent({ text, className = '' }) {
       while (index < lines.length && !/^\s*```/.test(lines[index])) code.push(lines[index++]);
       if (index < lines.length) index += 1;
       blocks.push(<pre key={`code-${index}`}><code className={language ? `language-${language}` : undefined}>{code.join('\n')}</code></pre>);
+      continue;
+    }
+
+    if (line.includes('|') && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+      const headers = tableCells(line);
+      const alignments = tableCells(lines[index + 1]).map(cell => cell.startsWith(':') && cell.endsWith(':') ? 'center' : cell.endsWith(':') ? 'right' : 'left');
+      index += 2;
+      const rows = [];
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+        rows.push(tableCells(lines[index]));
+        index += 1;
+      }
+      blocks.push(<div className="markdown-table-wrap" key={`table-${index}`}><table className="markdown-table"><thead><tr>{headers.map((cell, column) => <th key={column} style={{ textAlign: alignments[column] || 'left' }}>{renderInlineMarkdown(cell)}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, column) => <td key={column} style={{ textAlign: alignments[column] || 'left' }}>{renderInlineMarkdown(row[column] || '')}</td>)}</tr>)}</tbody></table></div>);
       continue;
     }
 
@@ -105,7 +120,7 @@ function MarkdownContent({ text, className = '' }) {
 
     const paragraph = [line];
     index += 1;
-    while (index < lines.length && lines[index].trim() && !/^(#{1,6})\s+/.test(lines[index]) && !/^\s*```/.test(lines[index]) && !/^\s*>\s?/.test(lines[index]) && !/^\s*[-*+]\s+/.test(lines[index]) && !/^\s*\d+[.)]\s+/.test(lines[index]) && !/^\s*([-*_]\s*){3,}$/.test(lines[index])) paragraph.push(lines[index++]);
+    while (index < lines.length && lines[index].trim() && !/^(#{1,6})\s+/.test(lines[index]) && !/^\s*```/.test(lines[index]) && !(lines[index].includes('|') && index + 1 < lines.length && isTableSeparator(lines[index + 1])) && !/^\s*>\s?/.test(lines[index]) && !/^\s*[-*+]\s+/.test(lines[index]) && !/^\s*\d+[.)]\s+/.test(lines[index]) && !/^\s*([-*_]\s*){3,}$/.test(lines[index])) paragraph.push(lines[index++]);
     blocks.push(<p key={`paragraph-${index}`}>{paragraph.map((part, partIndex) => <Fragment key={partIndex}>{partIndex > 0 && <br />}{renderInlineMarkdown(part)}</Fragment>)}</p>);
   }
   return <div className={`markdown-content ${className}`.trim()}>{blocks}</div>;
@@ -201,9 +216,13 @@ function App() {
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [categories, setCategories] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [drafts, setDrafts] = useState([]);
+  const [draftsReady, setDraftsReady] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [activeCategory, setActiveCategory] = useState('all');
   const [currentNote, setCurrentNote] = useState(emptyNote());
+  const [currentDraftId, setCurrentDraftId] = useState(null);
+  const [draftStatus, setDraftStatus] = useState('');
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -225,7 +244,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) { setCategories([]); setNotes([]); setDocuments([]); return; }
+    if (!session) { setCategories([]); setNotes([]); setDrafts([]); setDraftsReady(false); setDocuments([]); return; }
     let active = true;
     (async () => {
       const userId = session.user.id;
@@ -244,13 +263,18 @@ function App() {
         if (refreshed.error) { setNotice(refreshed.error.message); return; }
         categoryRows = refreshed.data || [];
       }
-      const [noteResult, docResult] = await Promise.all([
+      const [noteResult, docResult, draftResult] = await Promise.all([
         supabase.from('study_notes').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
         supabase.from('study_documents').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('study_note_drafts').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
       ]);
       if (!active) return;
       if (noteResult.error || docResult.error) setNotice(noteResult.error?.message || docResult.error?.message || 'No se pudo cargar la biblioteca.');
       else { setCategories(categoryRows); setNotes(noteResult.data || []); setDocuments(docResult.data || []); }
+      if (draftResult.error) {
+        setDraftsReady(false);
+        setNotice('Para activar los borradores sincronizados, ejecuta supabase/004_note_drafts.sql en el SQL Editor.');
+      } else { setDrafts(draftResult.data || []); setDraftsReady(true); }
     })();
     return () => { active = false; };
   }, [session]);
@@ -262,6 +286,54 @@ function App() {
 
   const currentCategory = categories.find(c => c.id === currentNote.category_id);
   const visibleDocuments = documents.filter(doc => activeCategory === 'all' || doc.category_id === activeCategory);
+  const visibleDrafts = drafts.filter(draft => activeCategory === 'all' || draft.category_id === activeCategory);
+  const persistedCurrentNote = currentNote.id ? notes.find(note => note.id === currentNote.id) : null;
+  const currentNoteDirty = currentNote.id
+    ? Boolean(persistedCurrentNote && (persistedCurrentNote.title !== currentNote.title || persistedCurrentNote.body !== currentNote.body || persistedCurrentNote.category_id !== currentNote.category_id || persistedCurrentNote.visibility !== currentNote.visibility))
+    : Boolean(currentNote.title.trim() || currentNote.body.trim());
+
+  async function persistDraft(note, preferredId = null) {
+    if (!session || !draftsReady) return { error: new Error('Los borradores sincronizados aún no están disponibles.') };
+    const noteId = note.id || null;
+    const values = {
+      user_id: session.user.id,
+      note_id: noteId,
+      category_id: note.category_id || null,
+      title: note.title || '',
+      body: note.body || '',
+      visibility: note.visibility || 'private',
+    };
+    let existing = drafts.find(draft => draft.id === preferredId) || drafts.find(draft => draft.note_id === noteId);
+    let result = existing
+      ? await supabase.from('study_note_drafts').update(values).eq('id', existing.id).eq('user_id', session.user.id).select().single()
+      : await supabase.from('study_note_drafts').insert(values).select().single();
+
+    if (result.error?.code === '23505') {
+      let query = supabase.from('study_note_drafts').select('*').eq('user_id', session.user.id);
+      query = noteId ? query.eq('note_id', noteId) : query.is('note_id', null);
+      const collision = await query.maybeSingle();
+      if (collision.data) result = await supabase.from('study_note_drafts').update(values).eq('id', collision.data.id).eq('user_id', session.user.id).select().single();
+    }
+    if (result.error) return { error: result.error };
+    setDrafts(previous => [result.data, ...previous.filter(draft => draft.id !== result.data.id)]);
+    return { data: result.data };
+  }
+
+  useEffect(() => {
+    if (!session || !draftsReady || !currentNoteDirty) { setDraftStatus(''); return undefined; }
+    const existing = drafts.find(draft => draft.id === currentDraftId) || drafts.find(draft => draft.note_id === (currentNote.id || null));
+    const alreadySaved = existing && existing.title === currentNote.title && existing.body === currentNote.body && existing.category_id === (currentNote.category_id || null) && existing.visibility === currentNote.visibility;
+    if (alreadySaved) { setCurrentDraftId(existing.id); setDraftStatus('saved'); return undefined; }
+
+    setDraftStatus('pending');
+    const timeout = window.setTimeout(async () => {
+      setDraftStatus('saving');
+      const result = await persistDraft(currentNote, currentDraftId);
+      if (result.error) setDraftStatus('error');
+      else { setCurrentDraftId(result.data.id); setDraftStatus('saved'); }
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [session, draftsReady, currentNoteDirty, currentNote, currentDraftId, drafts]);
 
   async function refreshLibrary() {
     if (!session) return;
@@ -272,16 +344,83 @@ function App() {
     ]);
     if (catResult.error || noteResult.error || docResult.error) { setNotice('No se pudo actualizar la biblioteca.'); return; }
     setCategories(catResult.data || []); setNotes(noteResult.data || []); setDocuments(docResult.data || []);
+    const draftResult = await supabase.from('study_note_drafts').select('*').eq('user_id', session.user.id).order('updated_at', { ascending: false });
+    if (draftResult.error) { setDraftsReady(false); setDrafts([]); }
+    else { setDrafts(draftResult.data || []); setDraftsReady(true); }
+  }
+
+  async function flushCurrentDraft() {
+    if (!currentNoteDirty) return true;
+    if (!draftsReady) {
+      setNotice('Ejecuta supabase/004_note_drafts.sql en Supabase para activar el guardado de borradores.');
+      return false;
+    }
+    const result = await persistDraft(currentNote, currentDraftId);
+    if (result.error) {
+      setDraftStatus('error');
+      setNotice('No se pudo guardar el borrador. Revisa tu conexión antes de cambiar de apunte.');
+      return false;
+    }
+    setCurrentDraftId(result.data.id);
+    setDraftStatus('saved');
+    return result.data;
+  }
+
+  async function openNote(note) {
+    if (currentNote.id === note.id) {
+      if (!(await flushCurrentDraft())) return;
+      setNotePreview(false);
+      return;
+    }
+    if (!(await flushCurrentDraft())) return;
+    const draft = drafts.find(item => item.note_id === note.id);
+    setCurrentNote(draft
+      ? { id: note.id, title: draft.title, body: draft.body, category_id: draft.category_id || '', visibility: draft.visibility }
+      : note);
+    setCurrentDraftId(draft?.id || null);
+    setNotePreview(false);
+  }
+
+  async function openDraft(draft) {
+    if (currentDraftId === draft.id) { setNotePreview(false); return; }
+    if (!(await flushCurrentDraft())) return;
+    setCurrentNote({ id: draft.note_id, title: draft.title, body: draft.body, category_id: draft.category_id || '', visibility: draft.visibility });
+    setCurrentDraftId(draft.id);
+    setNotePreview(false);
+  }
+
+  async function startNewNote() {
+    if (!(await flushCurrentDraft())) return;
+    if (!currentNote.id && currentNoteDirty) {
+      setNotice('Ya tienes un borrador de apunte nuevo; continúa redactándolo o guárdalo antes de empezar otro.');
+      return;
+    }
+    const draft = drafts.find(item => item.note_id === null);
+    if (draft && draft.id !== currentDraftId) return openDraft(draft);
+    setCurrentNote(emptyNote(activeCategory === 'all' ? categories[0]?.id : activeCategory));
+    setCurrentDraftId(null);
+    setNotePreview(false);
   }
 
   async function saveNote(event) {
-    event.preventDefault(); setBusy(true); setNotice('');
+    event.preventDefault();
+    const flushedDraft = draftsReady ? await flushCurrentDraft() : true;
+    if (!flushedDraft) return;
+    const draftIdToDelete = currentDraftId || (flushedDraft === true ? null : flushedDraft.id);
+    setBusy(true); setNotice('');
     const values = { title: currentNote.title.trim(), body: currentNote.body, category_id: currentNote.category_id || null, visibility: currentNote.visibility, published_at: currentNote.visibility === 'public' ? new Date().toISOString() : null };
     const result = currentNote.id
       ? await supabase.from('study_notes').update(values).eq('id', currentNote.id).select().single()
       : await supabase.from('study_notes').insert({ ...values, user_id: session.user.id }).select().single();
     setBusy(false);
     if (result.error) { setNotice(result.error.message); return; }
+    let draftDeleteIssue = '';
+    if (draftsReady && draftIdToDelete) {
+      const deletedDraft = await supabase.from('study_note_drafts').delete().eq('id', draftIdToDelete).eq('user_id', session.user.id);
+      if (deletedDraft.error) draftDeleteIssue = 'Apunte guardado. No se pudo eliminar el borrador anterior; puedes abrirlo desde la lista de borradores.';
+      else setDrafts(previous => previous.filter(draft => draft.id !== draftIdToDelete));
+    }
+    setCurrentDraftId(null); setDraftStatus('');
     await refreshLibrary(); setCurrentNote(result.data);
     const noteText = [result.data.title, result.data.body].filter(Boolean).join('\n\n');
     const indexed = await supabase.functions.invoke('study-rag', { body: {
@@ -289,11 +428,11 @@ function App() {
       categoryId: result.data.category_id, title: result.data.title,
       chunks: splitIntoChunks(noteText),
     } });
-    setNotice(indexed.error
+    setNotice(draftDeleteIssue || (indexed.error
       ? `Apunte guardado, pero no se pudo indexar: ${indexed.error.message}`
       : indexed.data?.indexed
         ? `Apunte guardado e indexado (${indexed.data.indexed} fragmentos).`
-        : 'Apunte guardado, pero no contiene texto para indexar.');
+        : 'Apunte guardado, pero no contiene texto para indexar.'));
   }
 
   async function addCategory() {
@@ -358,7 +497,7 @@ function App() {
         ? Boolean(saved && (saved.title !== currentNote.title || saved.body !== currentNote.body || saved.category_id !== currentNote.category_id || saved.visibility !== currentNote.visibility))
         : Boolean(currentNote.title.trim() || currentNote.body.trim());
       if (hasUnsavedChanges && !window.confirm('Tienes cambios sin guardar en el editor. ¿Quieres abrir la fuente de todas formas?')) return;
-      setCurrentNote(note);
+      await openNote(note);
       setActiveCategory(note.category_id || 'all');
       setSearch('');
       return;
@@ -423,33 +562,34 @@ function App() {
       <header className="topbar"><button className="icon-button menu-toggle" onClick={() => setMobileMenu(true)} aria-label="Abrir menú">☰</button><div className="breadcrumbs">Biblioteca <span>/</span> {activeCategory === 'all' ? 'Todos los apuntes' : categories.find(c => c.id === activeCategory)?.name}</div><div className="topbar-spacer" /><span className="private-label"><span /> Privado</span></header>
       <div className="workspace">
         <section className="library-column">
-          <div className="page-heading"><div><span className="eyebrow">ESPACIO DE ESTUDIO</span><h1>{activeCategory === 'all' ? 'Tu biblioteca' : categories.find(c => c.id === activeCategory)?.name}</h1><p>Guarda tus apuntes, documentos y prácticas en un solo lugar.</p></div><button className="btn btn-primary" onClick={() => setCurrentNote(emptyNote(activeCategory === 'all' ? categories[0]?.id : activeCategory))}>＋ Nuevo apunte</button></div>
+          <div className="page-heading"><div><span className="eyebrow">ESPACIO DE ESTUDIO</span><h1>{activeCategory === 'all' ? 'Tu biblioteca' : categories.find(c => c.id === activeCategory)?.name}</h1><p>Guarda tus apuntes, documentos y prácticas en un solo lugar.</p></div><button className="btn btn-primary" onClick={startNewNote}>＋ Nuevo apunte</button></div>
           <div className="library-toolbar"><div className="search-field"><span>⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar en tus apuntes…" aria-label="Buscar apuntes" /></div><span className="result-count">{visibleNotes.length} {visibleNotes.length === 1 ? 'apunte' : 'apuntes'}</span></div>
           <section className="rag-panel">
             <div className="rag-heading"><span>✦</span><div><strong>Pregunta a tu biblioteca</strong><small>Respuestas basadas en tus notas y documentos privados.</small></div></div>
             <form className="rag-form" onSubmit={askLibrary}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ej.: ¿Cómo se calcula una subred IPv6?" aria-label="Pregunta para tu biblioteca" maxLength={1200} /><button className="btn btn-primary" disabled={asking || !question.trim()}>{asking ? 'Buscando…' : 'Preguntar'}</button></form>
             {ragAnswer && <div className="rag-answer" role="status"><MarkdownContent text={ragAnswer} className="rag-markdown" />{ragSources.length > 0 && <div className="rag-source-list"><strong>Fuentes usadas</strong>{ragSources.map((source, index) => <div className="rag-source-item" key={`${source.noteId || source.documentId || source.title}-${index}`}><div className="rag-source-heading"><span>[{index + 1}] {source.title}</span><button type="button" className="rag-source-open" onClick={() => openRagSource(source)}>{source.noteId ? 'Abrir apunte' : 'Abrir documento'} ↗</button></div>{source.excerpt && <details><summary>Ver fragmento consultado</summary><MarkdownContent text={source.excerpt} /></details>}</div>)}</div>}</div>}
           </section>
+          {visibleDrafts.length > 0 && <section className="drafts-panel"><div className="drafts-heading"><div><h2>Borradores</h2><p>Guardados automáticamente y sincronizados con tu cuenta.</p></div><span>{visibleDrafts.length}</span></div><div className="drafts-list">{visibleDrafts.map(draft => <button type="button" className={`draft-row ${currentDraftId === draft.id ? 'selected' : ''}`} key={draft.id} onClick={() => openDraft(draft)}><span className="draft-icon">✎</span><span className="draft-row-main"><strong>{draft.title.trim() || 'Borrador sin título'}</strong><small>{draft.body.trim().slice(0, 100) || 'Empieza a redactar este apunte…'}</small></span><span className="draft-row-meta">{draft.note_id ? 'Cambios pendientes' : 'Nuevo apunte'}<small>{new Date(draft.updated_at).toLocaleDateString('es')}</small></span></button>)}</div></section>}
           <div className="notes-list">{visibleNotes.length ? visibleNotes.map(note => {
             const category = categories.find(c => c.id === note.category_id);
-            return <button key={note.id} className={`note-row ${currentNote.id === note.id ? 'selected' : ''}`} onClick={() => setCurrentNote(note)}><span className="note-file-icon">▤</span><span className="note-row-main"><strong>{note.title || 'Sin título'}</strong><span>{note.body?.slice(0, 115) || 'Apunte sin contenido todavía'}</span></span><span className="note-row-meta">{category?.name || 'Sin categoría'}<small>{new Date(note.updated_at).toLocaleDateString('es')}</small></span><span className={`visibility-pill ${note.visibility}`}>{note.visibility === 'public' ? 'Público' : 'Privado'}</span></button>;
-          }) : <div className="empty-state"><div className="empty-illustration">▤</div><h2>Aún no hay apuntes</h2><p>Crea el primer apunte de esta categoría para empezar a construir tu biblioteca.</p><button className="btn btn-outline-primary" onClick={() => setCurrentNote(emptyNote(activeCategory === 'all' ? categories[0]?.id : activeCategory))}>Crear un apunte</button></div>}</div>
+            return <button key={note.id} className={`note-row ${currentNote.id === note.id ? 'selected' : ''}`} onClick={() => openNote(note)}><span className="note-file-icon">▤</span><span className="note-row-main"><strong>{note.title || 'Sin título'}</strong><span>{note.body?.slice(0, 115) || 'Apunte sin contenido todavía'}</span></span><span className="note-row-meta">{category?.name || 'Sin categoría'}<small>{new Date(note.updated_at).toLocaleDateString('es')}</small></span><span className={`visibility-pill ${note.visibility}`}>{note.visibility === 'public' ? 'Público' : 'Privado'}</span></button>;
+          }) : visibleDrafts.length === 0 && <div className="empty-state"><div className="empty-illustration">▤</div><h2>Aún no hay apuntes</h2><p>Crea el primer apunte de esta categoría para empezar a construir tu biblioteca.</p><button className="btn btn-outline-primary" onClick={startNewNote}>Crear un apunte</button></div>}</div>
           <div className="documents-panel"><div className="documents-heading"><div><h2>Documentos</h2><p>Archivos privados; indexamos PDF, TXT y MD.</p></div><label className="btn btn-outline-primary btn-sm mb-0">＋ Subir archivo<input type="file" hidden multiple accept=".pdf,.txt,.md" onChange={uploadFiles} disabled={busy} /></label></div>
             {visibleDocuments.length ? <div className="document-list">{visibleDocuments.map(doc => <div className="document-row" key={doc.id}><span className="doc-type">{doc.file_name.split('.').pop()?.slice(0, 4).toUpperCase()}</span><button className="document-name" onClick={() => openDocument(doc)}>{doc.file_name}<small>{(doc.size_bytes / 1024).toFixed(0)} KB · {doc.processing_status === 'ready' ? 'Indexado para búsqueda' : doc.processing_status === 'error' ? (doc.processing_error || 'No se pudo indexar') : doc.processing_status === 'processing' ? 'Procesando…' : 'Guardado'}</small></button><button className="icon-button" title="Eliminar documento" onClick={() => deleteDocument(doc)}>×</button></div>)}</div> : <div className="document-empty">Todavía no hay archivos. Súbelos para conservarlos de forma privada.</div>}
           </div>
         </section>
 
-        <aside className="editor-column"><div className="editor-top"><div><span className="eyebrow">EDITOR DE APUNTES</span><div className="editor-status">{currentNote.id ? 'Cambios guardados al actualizar' : 'Nuevo apunte'}</div></div>{currentNote.id && <button className="icon-button" title="Copiar enlace público" disabled={currentNote.visibility !== 'public'} onClick={copyPublicLink}>↗</button>}</div>
-          <form onSubmit={saveNote} className="note-form"><input className="note-title-input" value={currentNote.title} onChange={e => setCurrentNote({ ...currentNote, title: e.target.value })} placeholder="Título del apunte" aria-label="Título" required maxLength={180} />
+        <aside className="editor-column"><div className="editor-top"><div><span className="eyebrow">EDITOR DE APUNTES</span><div className="editor-status">{draftStatus === 'saving' ? 'Guardando borrador…' : draftStatus === 'pending' ? 'Cambios pendientes de guardar…' : draftStatus === 'saved' ? 'Borrador sincronizado' : draftStatus === 'error' ? 'No se pudo guardar el borrador' : !draftsReady ? 'Ejecuta migración 004 para sincronizar borradores' : currentNote.id ? 'Cambios guardados al actualizar' : 'Nuevo apunte'}</div></div>{currentNote.id && <button className="icon-button" title="Copiar enlace público" disabled={currentNote.visibility !== 'public'} onClick={copyPublicLink}>↗</button>}</div>
+          <form onSubmit={saveNote} className="note-form"><input className="note-title-input" value={currentNote.title} onChange={e => setCurrentNote({ ...currentNote, title: e.target.value })} onBlur={flushCurrentDraft} placeholder="Título del apunte" aria-label="Título" required maxLength={180} />
             <div className="editor-controls"><select className="form-select form-select-sm" value={currentNote.category_id || ''} onChange={e => setCurrentNote({ ...currentNote, category_id: e.target.value })} aria-label="Categoría"><option value="">Sin categoría</option>{categories.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select><select className="form-select form-select-sm visibility-select" value={currentNote.visibility} onChange={e => setCurrentNote({ ...currentNote, visibility: e.target.value })} aria-label="Visibilidad"><option value="private">Privado</option><option value="public">Publicado</option></select></div>
             <div className="markdown-editor-tabs" role="tablist" aria-label="Editor Markdown"><button type="button" role="tab" aria-selected={!notePreview} className={!notePreview ? 'active' : ''} onClick={() => setNotePreview(false)}>Redactar</button><button type="button" role="tab" aria-selected={notePreview} className={notePreview ? 'active' : ''} onClick={() => setNotePreview(true)}>Vista previa</button><span>Markdown: **negrita**, `código`, # título</span></div>
             {notePreview
               ? <div className="note-body-preview"><MarkdownContent text={currentNote.body || '*La vista previa de tu apunte aparecerá aquí.*'} /></div>
-              : <textarea className="note-body-input" value={currentNote.body} onChange={e => setCurrentNote({ ...currentNote, body: e.target.value })} placeholder={'Escribe lo que aprendiste…\n\nPuedes documentar conceptos, comandos, ejemplos y los pasos de tu laboratorio.'} />}
+              : <textarea className="note-body-input" value={currentNote.body} onChange={e => setCurrentNote({ ...currentNote, body: e.target.value })} onBlur={flushCurrentDraft} placeholder={'Escribe lo que aprendiste…\n\nPuedes documentar conceptos, comandos, ejemplos y los pasos de tu laboratorio.'} />}
             <div className="editor-footer"><span>{currentNote.visibility === 'public' ? 'Esta nota podrá verla cualquiera con el enlace.' : 'Solo tú puedes ver esta nota.'}</span><button className="btn btn-primary" disabled={busy}>{busy ? 'Guardando…' : 'Guardar apunte'}</button></div>
           </form>
           {notice && <div className="notice" role="status">{notice}<button aria-label="Cerrar mensaje" onClick={() => setNotice('')}>×</button></div>}
-          <div className="editor-hint"><span>✦</span><p><strong>Tu conocimiento crece contigo.</strong><br />Cuando conectemos el buscador RAG, podrás hacer preguntas sobre tus documentos y notas guardadas.</p></div>
+          <div className="editor-hint"><span>✦</span><p><strong>Tu conocimiento crece contigo.</strong><br />Redacta con Markdown; los cambios se guardan como borrador y solo se publican al guardar el apunte.</p></div>
           <div className="category-context"><span className="context-dot" style={{ background: currentCategory?.color || '#cbd5e1' }} /><div><strong>{currentCategory?.name || 'Selecciona una categoría'}</strong><small>{currentCategory?.description || 'Organiza este apunte para encontrarlo después.'}</small></div></div>
         </aside>
       </div>
