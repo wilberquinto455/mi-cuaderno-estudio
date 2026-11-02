@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { supabase, supabaseConfigured } from './supabase.js';
 import { extractStudyText, splitIntoChunks } from './documentText.js';
 
@@ -23,6 +23,94 @@ function getPublicNoteId() {
   return new URLSearchParams(window.location.hash.slice(1)).get('nota');
 }
 
+function renderInlineMarkdown(text) {
+  const tokenPattern = /(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*]+\*|_[^_]+_)/g;
+  return String(text).split(tokenPattern).filter(Boolean).map((token, index) => {
+    if (token.startsWith('**') && token.endsWith('**')) return <strong key={index}>{token.slice(2, -2)}</strong>;
+    if (token.startsWith('__') && token.endsWith('__')) return <strong key={index}>{token.slice(2, -2)}</strong>;
+    if (token.startsWith('`') && token.endsWith('`')) return <code key={index}>{token.slice(1, -1)}</code>;
+    if (token.startsWith('*') && token.endsWith('*')) return <em key={index}>{token.slice(1, -1)}</em>;
+    if (token.startsWith('_') && token.endsWith('_')) return <em key={index}>{token.slice(1, -1)}</em>;
+    if (token.startsWith('[')) {
+      const match = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (match) {
+        try {
+          const url = new URL(match[2].trim(), window.location.origin);
+          if (['http:', 'https:', 'mailto:'].includes(url.protocol)) {
+            const external = url.origin !== window.location.origin;
+            return <a key={index} href={url.href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>{match[1]}</a>;
+          }
+        } catch { /* Show unsafe or malformed links as plain text. */ }
+        return <span key={index}>{match[1]}</span>;
+      }
+    }
+    return <span key={index}>{token}</span>;
+  });
+}
+
+function MarkdownContent({ text, className = '' }) {
+  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  const blocks = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) { index += 1; continue; }
+
+    if (/^\s*```/.test(line)) {
+      const language = line.trim().slice(3).trim();
+      const code = [];
+      index += 1;
+      while (index < lines.length && !/^\s*```/.test(lines[index])) code.push(lines[index++]);
+      if (index < lines.length) index += 1;
+      blocks.push(<pre key={`code-${index}`}><code className={language ? `language-${language}` : undefined}>{code.join('\n')}</code></pre>);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const Tag = `h${Math.min(heading[1].length, 4)}`;
+      blocks.push(<Tag key={`heading-${index}`}>{renderInlineMarkdown(heading[2])}</Tag>);
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*([-*_]\s*){3,}$/.test(line)) {
+      blocks.push(<hr key={`rule-${index}`} />);
+      index += 1;
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(line)) {
+      const quote = [];
+      while (index < lines.length && /^\s*>\s?/.test(lines[index])) quote.push(lines[index++].replace(/^\s*>\s?/, ''));
+      blocks.push(<blockquote key={`quote-${index}`}>{quote.map((part, partIndex) => <p key={partIndex}>{renderInlineMarkdown(part)}</p>)}</blockquote>);
+      continue;
+    }
+
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const isOrdered = Boolean(ordered);
+      const items = [];
+      while (index < lines.length) {
+        const item = lines[index].match(isOrdered ? /^\s*\d+[.)]\s+(.+)$/ : /^\s*[-*+]\s+(.+)$/);
+        if (!item) break;
+        items.push(<li key={index}>{renderInlineMarkdown(item[1])}</li>);
+        index += 1;
+      }
+      const List = isOrdered ? 'ol' : 'ul';
+      blocks.push(<List key={`list-${index}`}>{items}</List>);
+      continue;
+    }
+
+    const paragraph = [line];
+    index += 1;
+    while (index < lines.length && lines[index].trim() && !/^(#{1,6})\s+/.test(lines[index]) && !/^\s*```/.test(lines[index]) && !/^\s*>\s?/.test(lines[index]) && !/^\s*[-*+]\s+/.test(lines[index]) && !/^\s*\d+[.)]\s+/.test(lines[index]) && !/^\s*([-*_]\s*){3,}$/.test(lines[index])) paragraph.push(lines[index++]);
+    blocks.push(<p key={`paragraph-${index}`}>{paragraph.map((part, partIndex) => <Fragment key={partIndex}>{partIndex > 0 && <br />}{renderInlineMarkdown(part)}</Fragment>)}</p>);
+  }
+  return <div className={`markdown-content ${className}`.trim()}>{blocks}</div>;
+}
+
 function PublicNote() {
   const [note, setNote] = useState(null);
   const [status, setStatus] = useState('Cargando nota…');
@@ -41,7 +129,7 @@ function PublicNote() {
   }, []);
 
   return <main className="public-page"><a href={window.location.pathname} className="brand-link">← Estudio Guía</a>
-    {note ? <article className="public-note"><span className="eyebrow">APUNTE PÚBLICO</span><h1>{note.title}</h1><p className="public-date">Publicado {new Date(note.published_at || note.created_at).toLocaleDateString('es')}</p><div className="note-content">{note.body}</div></article> : <p className="text-secondary mt-5">{status}</p>}
+    {note ? <article className="public-note"><span className="eyebrow">APUNTE PÚBLICO</span><h1>{note.title}</h1><p className="public-date">Publicado {new Date(note.published_at || note.created_at).toLocaleDateString('es')}</p><MarkdownContent text={note.body} className="note-content" /></article> : <p className="text-secondary mt-5">{status}</p>}
   </main>;
 }
 
@@ -124,6 +212,7 @@ function App() {
   const [ragAnswer, setRagAnswer] = useState(null);
   const [ragSources, setRagSources] = useState([]);
   const [asking, setAsking] = useState(false);
+  const [notePreview, setNotePreview] = useState(false);
 
   useEffect(() => {
     if (!supabaseConfigured) { setAuthReady(true); return undefined; }
@@ -339,7 +428,7 @@ function App() {
           <section className="rag-panel">
             <div className="rag-heading"><span>✦</span><div><strong>Pregunta a tu biblioteca</strong><small>Respuestas basadas en tus notas y documentos privados.</small></div></div>
             <form className="rag-form" onSubmit={askLibrary}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ej.: ¿Cómo se calcula una subred IPv6?" aria-label="Pregunta para tu biblioteca" maxLength={1200} /><button className="btn btn-primary" disabled={asking || !question.trim()}>{asking ? 'Buscando…' : 'Preguntar'}</button></form>
-            {ragAnswer && <div className="rag-answer" role="status"><p>{ragAnswer}</p>{ragSources.length > 0 && <div className="rag-source-list"><strong>Fuentes usadas</strong>{ragSources.map((source, index) => <div className="rag-source-item" key={`${source.noteId || source.documentId || source.title}-${index}`}><div className="rag-source-heading"><span>[{index + 1}] {source.title}</span><button type="button" className="rag-source-open" onClick={() => openRagSource(source)}>{source.noteId ? 'Abrir apunte' : 'Abrir documento'} ↗</button></div>{source.excerpt && <details><summary>Ver fragmento consultado</summary><p>{source.excerpt}</p></details>}</div>)}</div>}</div>}
+            {ragAnswer && <div className="rag-answer" role="status"><MarkdownContent text={ragAnswer} className="rag-markdown" />{ragSources.length > 0 && <div className="rag-source-list"><strong>Fuentes usadas</strong>{ragSources.map((source, index) => <div className="rag-source-item" key={`${source.noteId || source.documentId || source.title}-${index}`}><div className="rag-source-heading"><span>[{index + 1}] {source.title}</span><button type="button" className="rag-source-open" onClick={() => openRagSource(source)}>{source.noteId ? 'Abrir apunte' : 'Abrir documento'} ↗</button></div>{source.excerpt && <details><summary>Ver fragmento consultado</summary><MarkdownContent text={source.excerpt} /></details>}</div>)}</div>}</div>}
           </section>
           <div className="notes-list">{visibleNotes.length ? visibleNotes.map(note => {
             const category = categories.find(c => c.id === note.category_id);
@@ -353,7 +442,10 @@ function App() {
         <aside className="editor-column"><div className="editor-top"><div><span className="eyebrow">EDITOR DE APUNTES</span><div className="editor-status">{currentNote.id ? 'Cambios guardados al actualizar' : 'Nuevo apunte'}</div></div>{currentNote.id && <button className="icon-button" title="Copiar enlace público" disabled={currentNote.visibility !== 'public'} onClick={copyPublicLink}>↗</button>}</div>
           <form onSubmit={saveNote} className="note-form"><input className="note-title-input" value={currentNote.title} onChange={e => setCurrentNote({ ...currentNote, title: e.target.value })} placeholder="Título del apunte" aria-label="Título" required maxLength={180} />
             <div className="editor-controls"><select className="form-select form-select-sm" value={currentNote.category_id || ''} onChange={e => setCurrentNote({ ...currentNote, category_id: e.target.value })} aria-label="Categoría"><option value="">Sin categoría</option>{categories.map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select><select className="form-select form-select-sm visibility-select" value={currentNote.visibility} onChange={e => setCurrentNote({ ...currentNote, visibility: e.target.value })} aria-label="Visibilidad"><option value="private">Privado</option><option value="public">Publicado</option></select></div>
-            <textarea className="note-body-input" value={currentNote.body} onChange={e => setCurrentNote({ ...currentNote, body: e.target.value })} placeholder={'Escribe lo que aprendiste…\n\nPuedes documentar conceptos, comandos, ejemplos y los pasos de tu laboratorio.'} />
+            <div className="markdown-editor-tabs" role="tablist" aria-label="Editor Markdown"><button type="button" role="tab" aria-selected={!notePreview} className={!notePreview ? 'active' : ''} onClick={() => setNotePreview(false)}>Redactar</button><button type="button" role="tab" aria-selected={notePreview} className={notePreview ? 'active' : ''} onClick={() => setNotePreview(true)}>Vista previa</button><span>Markdown: **negrita**, `código`, # título</span></div>
+            {notePreview
+              ? <div className="note-body-preview"><MarkdownContent text={currentNote.body || '*La vista previa de tu apunte aparecerá aquí.*'} /></div>
+              : <textarea className="note-body-input" value={currentNote.body} onChange={e => setCurrentNote({ ...currentNote, body: e.target.value })} placeholder={'Escribe lo que aprendiste…\n\nPuedes documentar conceptos, comandos, ejemplos y los pasos de tu laboratorio.'} />}
             <div className="editor-footer"><span>{currentNote.visibility === 'public' ? 'Esta nota podrá verla cualquiera con el enlace.' : 'Solo tú puedes ver esta nota.'}</span><button className="btn btn-primary" disabled={busy}>{busy ? 'Guardando…' : 'Guardar apunte'}</button></div>
           </form>
           {notice && <div className="notice" role="status">{notice}<button aria-label="Cerrar mensaje" onClick={() => setNotice('')}>×</button></div>}
